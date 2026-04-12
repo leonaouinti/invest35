@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Invest35 — Opportunités Immobilières en Ille-et-Vilaine</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root {
+    --noir: #0d0d0d;
+    --creme: #f5f0e8;
+    --or: #c9a84c;
+    --or-light: #e8c97a;
+    --vert: #2d5a3d;
+    --vert-light: #4a8c61;
+    --rouge: #c0392b;
+    --gris: #6b6b6b;
+    --gris-light: #e8e4dc;
+    --blanc: #fafaf7;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'DM Sans', sans-serif; background: var(--noir); color: var(--creme); min-height: 100vh; overflow-x: hidden; }
+  header { background: var(--noir); border-bottom: 1px solid rgba(201,168,76,0.3); padding: 0 2rem; display: flex; align-items: center; justify-content: space-between; height: 64px; position: sticky; top: 0; z-index: 1000; }
+  .logo { display: flex; align-items: baseline; gap: 0.4rem; }
+  .logo-main { font-family: 'Playfair Display', serif; font-weight: 900; font-size: 1.6rem; color: var(--or); letter-spacing: -0.02em; }
+  .logo-sub { font-family: 'DM Mono', monospace; font-size: 0.65rem; color: var(--gris); letter-spacing: 0.15em; text-transform: uppercase; }
+  .header-stats { display: flex; gap: 2rem; }
+  .hstat { text-align: center; }
+  .hstat-val { font-family: 'DM Mono', monospace; font-size: 1rem; font-weight: 500; color: var(--or); }
+  .hstat-lbl { font-size: 0.6rem; color: var(--gris); text-transform: uppercase; letter-spacing: 0.1em; }
+  .app { display: grid; grid-template-columns: 380px 1fr; height: calc(100vh - 64px); }
+  .sidebar { background: #111; border-right: 1px solid rgba(201,168,76,0.15); overflow-y: auto; display: flex; flex-direction: column; }
+  .sidebar::-webkit-scrollbar { width: 4px; }
+  .sidebar::-webkit-scrollbar-thumb { background: rgba(201,168,76,0.3); border-radius: 2px; }
+  .search-area { padding: 1.2rem; border-bottom: 1px solid rgba(201,168,76,0.1); background: rgba(201,168,76,0.03); }
+  .search-title { font-family: 'Playfair Display', serif; font-size: 0.85rem; color: var(--or); letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 1rem; }
+  .search-row { display: flex; gap: 0.5rem; margin-bottom: 0.7rem; }
+  .search-input { flex: 1; background: rgba(255,255,255,0.05); border: 1px solid rgba(201,168,76,0.25); border-radius: 4px; padding: 0.5rem 0.75rem; color: var(--creme); font-family: 'DM Sans', sans-serif; font-size: 0.8rem; outline: none; transition: border-color 0.2s; }
+  .search-input:focus { border-color: var(--or); }
+  .search-input::placeholder { color: rgba(245,240,232,0.3); }
+  .filter-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+  .filter-group label { display: block; font-size: 0.6rem; color: var(--gris); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.3rem; }
+  select, input[type="range"] { width: 100%; }
+  select { background: rgba(255,255,255,0.05); border: 1px solid rgba(201,168,76,0.25); border-radius: 4px; padding: 0.45rem 0.6rem; color: var(--creme); font-family: 'DM Sans', sans-serif; font-size: 0.78rem; outline: none; cursor: pointer; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23c9a84c'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 0.6rem center; }
+  select option { background: #1a1a1a; }
+  .range-val { font-family: 'DM Mono', monospace; font-size: 0.7rem; color: var(--or); text-align: right; margin-top: 0.2rem; }
+  input[type="range"] { -webkit-appearance: none; background: rgba(201,168,76,0.2); height: 3px; border-radius: 2px; outline: none; margin-top: 0.5rem; }
+  input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: var(--or); cursor: pointer; border: 2px solid var(--noir); }
+  .filter-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.8rem; }
+  .chip { padding: 0.3rem 0.7rem; border-radius: 50px; border: 1px solid rgba(201,168,76,0.3); font-size: 0.7rem; cursor: pointer; transition: all 0.2s; color: var(--gris); background: transparent; }
+  .chip:hover, .chip.active { background: var(--or); color: var(--noir); border-color: var(--or); font-weight: 600; }
+  .btn-search { width: 100%; margin-top: 1rem; padding: 0.65rem; background: var(--or); border: none; border-radius: 4px; color: var(--noir); font-family: 'DM Sans', sans-serif; font-weight: 600; font-size: 0.8rem; letter-spacing: 0.05em; text-transform: uppercase; cursor: pointer; transition: background 0.2s; }
+  .btn-search:hover { background: var(--or-light); }
+  .results-header { padding: 1rem 1.2rem 0.5rem; display: flex; align-items: center; justify-content: space-between; }
+  .results-count { font-family: 'DM Mono', monospace; font-size: 0.72rem; color: var(--gris); }
+  .results-count span { color: var(--or); font-weight: 500; }
+  .sort-select { background: transparent; border: none; color: var(--gris); font-size: 0.72rem; cursor: pointer; outline: none; font-family: 'DM Sans', sans-serif; }
+  .sort-select option { background: #1a1a1a; }
+  .property-list { padding: 0 0.8rem 1rem; display: flex; flex-direction: column; gap: 0.6rem; }
+  .prop-card { background: rgba(255,255,255,0.03); border: 1px solid rgba(201,168,76,0.12); border-radius: 6px; padding: 0.9rem; cursor: pointer; transition: all 0.2s; position: relative; overflow: hidden; animation: fadeInUp 0.3s ease both; }
+  .prop-card:hover { border-color: rgba(201,168,76,0.5); background: rgba(201,168,76,0.05); transform: translateY(-1px); }
+  .prop-card.selected { border-color: var(--or); background: rgba(201,168,76,0.08); }
+  .prop-badge { position: absolute; top: 0.6rem; right: 0.6rem; padding: 0.2rem 0.5rem; border-radius: 3px; font-family: 'DM Mono', monospace; font-size: 0.6rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; }
+  .badge-hot { background: rgba(192,57,43,0.2); color: #e74c3c; border: 1px solid rgba(231,76,60,0.3); }
+  .badge-good { background: rgba(45,90,61,0.3); color: #4a8c61; border: 1px solid rgba(74,140,97,0.4); }
+  .badge-normal { background: rgba(107,107,107,0.2); color: #888; border: 1px solid rgba(136,136,136,0.3); }
+  .prop-commune { font-family: 'DM Mono', monospace; font-size: 0.6rem; color: var(--or); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.25rem; }
+  .prop-title { font-family: 'Playfair Display', serif; font-size: 0.95rem; color: var(--creme); margin-bottom: 0.5rem; padding-right: 4rem; line-height: 1.3; }
+  .prop-metrics { display: flex; gap: 1rem; margin-bottom: 0.5rem; }
+  .prop-metric { display: flex; flex-direction: column; }
+  .pm-val { font-family: 'DM Mono', monospace; font-size: 0.85rem; font-weight: 500; color: var(--creme); }
+  .pm-val.green { color: #4a8c61; }
+  .pm-val.gold { color: var(--or); }
+  .pm-lbl { font-size: 0.58rem; color: var(--gris); text-transform: uppercase; letter-spacing: 0.08em; }
+  .prop-score-bar { height: 3px; background: rgba(255,255,255,0.08); border-radius: 2px; margin-top: 0.5rem; overflow: hidden; }
+  .prop-score-fill { height: 100%; border-radius: 2px; transition: width 0.6s ease; }
+  .prop-tags { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.5rem; }
+  .prop-tag { font-size: 0.6rem; padding: 0.15rem 0.4rem; border-radius: 2px; background: rgba(255,255,255,0.05); color: var(--gris); text-transform: uppercase; letter-spacing: 0.06em; }
+  .map-area { position: relative; display: flex; flex-direction: column; }
+  #map { flex: 1; background: #1a1a1a; }
+  .detail-panel { position: absolute; bottom: 0; right: 0; width: 380px; background: #111; border-left: 1px solid rgba(201,168,76,0.2); border-top: 1px solid rgba(201,168,76,0.2); transform: translateY(100%); transition: transform 0.35s cubic-bezier(0.4,0,0.2,1); z-index: 900; max-height: 75vh; overflow-y: auto; }
+  .detail-panel.open { transform: translateY(0); }
+  .detail-close { position: absolute; top: 0.8rem; right: 0.8rem; width: 28px; height: 28px; background: rgba(201,168,76,0.1); border: 1px solid rgba(201,168,76,0.25); border-radius: 4px; color: var(--or); font-size: 0.9rem; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .detail-content { padding: 1.2rem; }
+  .detail-commune { font-family: 'DM Mono', monospace; font-size: 0.6rem; color: var(--or); text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 0.3rem; }
+  .detail-title { font-family: 'Playfair Display', serif; font-size: 1.3rem; color: var(--creme); margin-bottom: 1rem; line-height: 1.25; }
+  .detail-price { font-family: 'Playfair Display', serif; font-size: 2rem; color: var(--or); font-weight: 700; margin-bottom: 0.2rem; }
+  .detail-price-m2 { font-family: 'DM Mono', monospace; font-size: 0.72rem; color: var(--gris); margin-bottom: 1.2rem; }
+  .detail-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.8rem; margin-bottom: 1.2rem; padding: 0.8rem; background: rgba(201,168,76,0.05); border: 1px solid rgba(201,168,76,0.1); border-radius: 6px; }
+  .dg-item { text-align: center; }
+  .dg-val { font-family: 'DM Mono', monospace; font-size: 1rem; color: var(--creme); font-weight: 500; }
+  .dg-val.green { color: #4a8c61; }
+  .dg-lbl { font-size: 0.58rem; color: var(--gris); text-transform: uppercase; letter-spacing: 0.08em; margin-top: 0.2rem; }
+  .detail-section-title { font-family: 'DM Mono', monospace; font-size: 0.62rem; color: var(--or); text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 0.6rem; margin-top: 1rem; }
+  .score-breakdown { display: flex; flex-direction: column; gap: 0.4rem; }
+  .score-item { display: flex; align-items: center; gap: 0.6rem; }
+  .score-label { font-size: 0.72rem; color: var(--gris); width: 120px; flex-shrink: 0; }
+  .score-bar-wrap { flex: 1; height: 4px; background: rgba(255,255,255,0.07); border-radius: 2px; overflow: hidden; }
+  .score-bar-fill { height: 100%; border-radius: 2px; }
+  .score-num { font-family: 'DM Mono', monospace; font-size: 0.65rem; color: var(--creme); width: 24px; text-align: right; }
+  .trend-mini { display: flex; align-items: flex-end; gap: 3px; height: 40px; margin-top: 0.6rem; }
+  .trend-bar { flex: 1; background: rgba(201,168,76,0.3); border-radius: 2px 2px 0 0; cursor: default; }
+  .trend-bar:hover { background: var(--or); }
+  .trend-labels { display: flex; justify-content: space-between; margin-top: 0.3rem; }
+  .trend-lbl { font-family: 'DM Mono', monospace; font-size: 0.55rem; color: var(--gris); }
+  .btn-contact { display: block; width: 100%; margin-top: 1.2rem; padding: 0.7rem; background: var(--or); border: none; border-radius: 4px; color: var(--noir); font-family: 'DM Sans', sans-serif; font-weight: 700; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; cursor: pointer; text-align: center; }
+  .map-legend { position: absolute; top: 1rem; left: 1rem; z-index: 800; background: rgba(13,13,13,0.9); border: 1px solid rgba(201,168,76,0.2); border-radius: 6px; padding: 0.8rem; backdrop-filter: blur(8px); }
+  .legend-title { font-family: 'DM Mono', monospace; font-size: 0.6rem; color: var(--or); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.5rem; }
+  .legend-item { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.3rem; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .legend-text { font-size: 0.65rem; color: var(--gris); }
+  .leaflet-container { background: #1a1a1a; }
+  .leaflet-control-zoom { border: 1px solid rgba(201,168,76,0.3) !important; }
+  .leaflet-control-zoom a { background: rgba(13,13,13,0.9) !important; color: var(--or) !important; border-color: rgba(201,168,76,0.2) !important; }
+  .leaflet-popup-content-wrapper { background: #1a1a1a; border: 1px solid rgba(201,168,76,0.3); border-radius: 6px; color: var(--creme); box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+  .leaflet-popup-tip { background: #1a1a1a; }
+  .leaflet-popup-content { margin: 0.8rem; font-family: 'DM Sans', sans-serif; }
+  .popup-commune { font-family: 'DM Mono', monospace; font-size: 0.6rem; color: var(--or); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.2rem; }
+  .popup-title { font-family: 'Playfair Display', serif; font-size: 0.9rem; margin-bottom: 0.4rem; }
+  .popup-price { font-family: 'DM Mono', monospace; font-size: 1rem; color: var(--or); margin-bottom: 0.3rem; }
+  .popup-meta { font-size: 0.65rem; color: var(--gris); }
+  .popup-btn { display: block; margin-top: 0.6rem; padding: 0.35rem 0.7rem; background: var(--or); color: var(--noir); font-size: 0.65rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; border: none; border-radius: 3px; cursor: pointer; width: 100%; }
+  @keyframes fadeInUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">
+    <span class="logo-main">Invest<span style="color:var(--creme)">35</span></span>
+    <span class="logo-sub">Ille-et-Vilaine · Immobilier</span>
+  </div>
+  <div class="header-stats">
+    <div class="hstat"><div class="hstat-val">247</div><div class="hstat-lbl">Opportunités</div></div>
+    <div class="hstat"><div class="hstat-val">3 240 €/m²</div><div class="hstat-lbl">Prix moyen</div></div>
+    <div class="hstat"><div class="hstat-val">5.8%</div><div class="hstat-lbl">Rendement moy.</div></div>
+    <div class="hstat"><div class="hstat-val" style="color:#4a8c61">+4.2%</div><div class="hstat-lbl">Tendance 12m</div></div>
+  </div>
+</header>
+<div class="app">
+  <div class="sidebar">
+    <div class="search-area">
+      <div class="search-title">Recherche & Filtres</div>
+      <div class="search-row">
+        <input class="search-input" type="text" id="commune-search" placeholder="Commune, quartier…" oninput="filterProperties()">
+      </div>
+      <div class="filter-grid">
+        <div class="filter-group">
+          <label>Type de bien</label>
+          <select id="f-type" onchange="filterProperties()">
+            <option value="">Tous types</option>
+            <option value="Appartement">Appartement</option>
+            <option value="Maison">Maison</option>
+            <option value="Immeuble">Immeuble de rapport</option>
+            <option value="Local">Local commercial</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>Stratégie</label>
+          <select id="f-strategy" onchange="filterProperties()">
+            <option value="">Toutes</option>
+            <option value="location">Location nue</option>
+            <option value="meuble">Meublé / LMNP</option>
+            <option value="coloc">Colocation</option>
+            <option value="airbnb">Saisonnier</option>
+            <option value="flip">Achat-revente</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>Prix max (€)</label>
+          <input type="range" id="f-price" min="50000" max="800000" value="800000" step="10000" oninput="updateRangeVal('f-price','price-val',v=>v>=800000?'Illimité':v.toLocaleString('fr-FR')+'€')">
+          <div class="range-val" id="price-val">Illimité</div>
+        </div>
+        <div class="filter-group">
+          <label>Rendement min (%)</label>
+          <input type="range" id="f-yield" min="0" max="12" value="0" step="0.5" oninput="updateRangeVal('f-yield','yield-val',v=>v===0?'Tous':v+'%+')">
+          <div class="range-val" id="yield-val">Tous</div>
+        </div>
+      </div>
+      <div style="margin-top:0.8rem">
+        <div style="font-size:0.6rem;color:var(--gris);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.4rem">Score d'opportunité</div>
+        <div class="filter-chips" id="opportunity-chips">
+          <span class="chip active" data-val="" onclick="setChip(this,'opportunity-chips');filterProperties()">Tous</span>
+          <span class="chip" data-val="hot" onclick="setChip(this,'opportunity-chips');filterProperties()">🔥 Coup de cœur</span>
+          <span class="chip" data-val="good" onclick="setChip(this,'opportunity-chips');filterProperties()">✓ Bon deal</span>
+          <span class="chip" data-val="normal" onclick="setChip(this,'opportunity-chips');filterProperties()">Standard</span>
+        </div>
+      </div>
+      <div style="margin-top:0.8rem">
+        <div style="font-size:0.6rem;color:var(--gris);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.4rem">Zone</div>
+        <div class="filter-chips" id="zone-chips">
+          <span class="chip active" data-val="" onclick="setChip(this,'zone-chips');filterProperties()">Toutes zones</span>
+          <span class="chip" data-val="rennes" onclick="setChip(this,'zone-chips');filterProperties()">Rennes Métropole</span>
+          <span class="chip" data-val="cote" onclick="setChip(this,'zone-chips');filterProperties()">Côte</span>
+          <span class="chip" data-val="interior" onclick="setChip(this,'zone-chips');filterProperties()">Intérieur</span>
+        </div>
+      </div>
+    </div>
+    <div class="results-header">
+      <div class="results-count"><span id="results-count">0</span> résultats</div>
+      <select class="sort-select" id="sort-select" onchange="filterProperties()">
+        <option value="score">↓ Score</option>
+        <option value="yield">↓ Rendement</option>
+        <option value="price-asc">↑ Prix</option>
+        <option value="price-desc">↓ Prix</option>
+      </select>
+    </div>
+    <div class="property-list" id="property-list"></div>
+  </div>
+  <div class="map-area">
+    <div id="map"></div>
+    <div class="map-legend">
+      <div class="legend-title">Prix/m²</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#e74c3c"></div><div class="legend-text">> 4 500 €</div></div>
+      <div class="legend-item"><div class="legend-dot" style="background:#c9a84c"></div><div class="legend-text">3 000–4 500 €</div></div>
+      <div class="legend-item"><div class="legend-dot" style="background:#4a8c61"></div><div class="legend-text">< 3 000 €</div></div>
+    </div>
+    <div class="detail-panel" id="detail-panel">
+      <div class="detail-content" id="detail-content"></div>
+    </div>
+  </div>
+</div>
+<script>
+const PROPERTIES = [
+  {id:1,commune:"Rennes",quartier:"Thabor – Saint-Hélier",type:"Appartement",price:285000,surface:68,rooms:3,priceM2:4191,marketAvg:4350,yield:5.2,rentEstimate:1240,lat:48.1147,lng:-1.6685,score:82,opportunity:"good",zone:"rennes",strategy:["location","meuble"],yearBuilt:1975,dpe:"D",tags:["Centre-ville","Transport","Étudiant"],trend:[3800,3900,4000,4050,4100,4191],scores:{location:88,rendement:72,marche:80,liquidite:90,travaux:65},description:"Appartement T3 bien situé proche métro, fort potentiel locatif étudiants et jeunes actifs."},
+  {id:2,commune:"Rennes",quartier:"Blosne – Europe",type:"Appartement",price:145000,surface:52,rooms:2,priceM2:2788,marketAvg:3200,yield:7.1,rentEstimate:860,lat:48.0942,lng:-1.6614,score:91,opportunity:"hot",zone:"rennes",strategy:["coloc","meuble"],yearBuilt:1970,dpe:"E",tags:["Sous-évalué","Rénovation","Fort rendement"],trend:[2400,2500,2580,2650,2700,2788],scores:{location:70,rendement:95,marche:88,liquidite:75,travaux:45},description:"Opportunité rare : T2 sous le prix du marché de 13%, secteur en forte revalorisation depuis le prolongement de la ligne b."},
+  {id:3,commune:"Saint-Malo",quartier:"Intra-Muros",type:"Appartement",price:320000,surface:55,rooms:2,priceM2:5818,marketAvg:5500,yield:6.8,rentEstimate:1820,lat:48.6490,lng:-2.0260,score:85,opportunity:"good",zone:"cote",strategy:["airbnb","meuble"],yearBuilt:1890,dpe:"C",tags:["Saisonnier","Intramuros","Tourisme"],trend:[4800,5000,5200,5400,5600,5818],scores:{location:95,rendement:82,marche:70,liquidite:80,travaux:78},description:"Appartement de caractère dans les remparts, idéal location saisonnière avec 180 nuits/an potentielles."},
+  {id:4,commune:"Cesson-Sévigné",quartier:"Via Silva",type:"Maison",price:395000,surface:118,rooms:5,priceM2:3347,marketAvg:3400,yield:4.1,rentEstimate:1350,lat:48.1201,lng:-1.6041,score:74,opportunity:"normal",zone:"rennes",strategy:["location"],yearBuilt:2008,dpe:"B",tags:["Famille","Jardin","Périphérie Rennes"],trend:[2900,3000,3100,3200,3280,3347],scores:{location:80,rendement:55,marche:82,liquidite:70,travaux:90},description:"Maison récente BBC, secteur résidentiel prisé des familles, proche Technopole Rennes Atalante."},
+  {id:5,commune:"Fougères",quartier:"Centre-ville",type:"Immeuble",price:220000,surface:280,rooms:8,priceM2:786,marketAvg:900,yield:9.4,rentEstimate:1730,lat:48.3508,lng:-1.2026,score:88,opportunity:"hot",zone:"interior",strategy:["location","coloc"],yearBuilt:1930,dpe:"F",tags:["Immeuble entier","Fort rendement","Travaux"],trend:[650,680,710,740,760,786],scores:{location:60,rendement:98,marche:72,liquidite:55,travaux:30},description:"Immeuble de 4 appartements (T1 à T3), cash-flow positif immédiat. Travaux de rénovation énergétique à prévoir."},
+  {id:6,commune:"Vitré",quartier:"Quartier de la Gare",type:"Maison",price:189000,surface:95,rooms:4,priceM2:1989,marketAvg:2100,yield:5.9,rentEstimate:930,lat:48.1244,lng:-1.2092,score:79,opportunity:"good",zone:"interior",strategy:["location","coloc"],yearBuilt:1965,dpe:"D",tags:["TGV Paris 1h20","Sous-évalué","Calme"],trend:[1600,1700,1800,1850,1920,1989],scores:{location:72,rendement:78,marche:85,liquidite:65,travaux:60},description:"Maison 4 pièces à 2 min de la gare TGV, Rennes à 30 min. Marché peu spéculatif, valeur refuge."},
+  {id:7,commune:"Dinard",quartier:"Bord de mer",type:"Appartement",price:410000,surface:72,rooms:3,priceM2:5694,marketAvg:5400,yield:5.5,rentEstimate:1880,lat:48.6305,lng:-2.0614,score:77,opportunity:"good",zone:"cote",strategy:["airbnb","location"],yearBuilt:1920,dpe:"D",tags:["Vue mer","Saisonnier","Prestige"],trend:[4600,4800,5000,5200,5450,5694],scores:{location:90,rendement:68,marche:75,liquidite:72,travaux:55},description:"T3 avec vue partielle sur mer, résidence Belle Époque. Potentiel locatif saisonnier exceptionnel."},
+  {id:8,commune:"Bruz",quartier:"Centre",type:"Appartement",price:172000,surface:48,rooms:2,priceM2:3583,marketAvg:3400,yield:5.7,rentEstimate:820,lat:47.9676,lng:-1.7487,score:76,opportunity:"normal",zone:"rennes",strategy:["meuble","location"],yearBuilt:2015,dpe:"B",tags:["Neuf","Métro ligne b","Périphérie sud"],trend:[2800,2950,3100,3250,3400,3583],scores:{location:78,rendement:74,marche:78,liquidite:80,travaux:95},description:"Appartement récent BBC, station métro ligne b à 5 min. Fort développement du secteur prévu."},
+  {id:9,commune:"Redon",quartier:"Centre historique",type:"Maison",price:138000,surface:110,rooms:5,priceM2:1255,marketAvg:1400,yield:7.3,rentEstimate:840,lat:47.6512,lng:-2.0834,score:81,opportunity:"good",zone:"interior",strategy:["location","coloc"],yearBuilt:1910,dpe:"E",tags:["Sous-évalué","Carrefour ferroviaire","Potentiel"],trend:[1000,1050,1100,1150,1200,1255],scores:{location:65,rendement:88,marche:80,liquidite:60,travaux:40},description:"Grande maison de ville 5 pièces à rénover. Redon est un nœud ferroviaire (Rennes, Nantes, Vannes) en mutation."},
+  {id:10,commune:"Rennes",quartier:"Beaulieu",type:"Appartement",price:198000,surface:58,rooms:3,priceM2:3414,marketAvg:3600,yield:6.3,rentEstimate:1040,lat:48.1158,lng:-1.6355,score:86,opportunity:"hot",zone:"rennes",strategy:["coloc","meuble"],yearBuilt:1985,dpe:"D",tags:["Campus","Sous-évalué","Forte demande"],trend:[2800,2950,3050,3150,3280,3414],scores:{location:85,rendement:86,marche:90,liquidite:88,travaux:55},description:"T3 à 500m du campus de Beaulieu (20 000 étudiants), très recherché en colocation étudiante. Prix 5% sous le marché."},
+  {id:11,commune:"Saint-Briac-sur-Mer",quartier:"Bord de mer",type:"Maison",price:685000,surface:140,rooms:6,priceM2:4893,marketAvg:4700,yield:3.8,rentEstimate:2180,lat:48.6222,lng:-2.1333,score:62,opportunity:"normal",zone:"cote",strategy:["airbnb"],yearBuilt:1970,dpe:"C",tags:["Luxe","Bord de mer","Saisonnier haut-de-gamme"],trend:[4000,4200,4400,4600,4720,4893],scores:{location:92,rendement:48,marche:65,liquidite:60,travaux:70},description:"Villa 6 pièces à 300m de la plage, potentiel locatif premium en saison (2 500 €/semaine). Investissement patrimonial."},
+  {id:12,commune:"Rennes",quartier:"Cleunay",type:"Local",price:165000,surface:75,rooms:0,priceM2:2200,marketAvg:2500,yield:7.8,rentEstimate:1073,lat:48.1075,lng:-1.7102,score:83,opportunity:"good",zone:"rennes",strategy:["location"],yearBuilt:1990,dpe:"D",tags:["Local commercial","Sous-évalué","Transformation possible"],trend:[1900,1950,2000,2050,2120,2200],scores:{location:75,rendement:90,marche:80,liquidite:65,travaux:50},description:"Local commercial convertible en logement (PLU favorable). Loyer actuel 1 073 €/mois bail commercial, vendeur pressé."}
+];
+let filtered=[...PROPERTIES],selectedId=null,markers={},map;
+function fmt(n){return n.toLocaleString('fr-FR');}
+function scoreColor(s){if(s>=85)return'#e74c3c';if(s>=75)return'#c9a84c';return'#4a8c61';}
+function opportunityBadge(o){if(o==='hot')return'<span class="prop-badge badge-hot">🔥 Coup de cœur</span>';if(o==='good')return'<span class="prop-badge badge-good">✓ Bon deal</span>';return'<span class="prop-badge badge-normal">Standard</span>';}
+function markerColor(p){if(p>4500)return'#e74c3c';if(p>=3000)return'#c9a84c';return'#4a8c61';}
+function updateRangeVal(id,valId,formatter){const v=parseFloat(document.getElementById(id).value);document.getElementById(valId).textContent=formatter(v);filterProperties();}
+function setChip(el,groupId){document.querySelectorAll('#'+groupId+' .chip').forEach(c=>c.classList.remove('active'));el.classList.add('active');}
+function getChipVal(groupId){const active=document.querySelector('#'+groupId+' .chip.active');return active?active.dataset.val:'';}
+function filterProperties(){
+  const search=document.getElementById('commune-search').value.toLowerCase();
+  const type=document.getElementById('f-type').value;
+  const strategy=document.getElementById('f-strategy').value;
+  const maxPrice=parseFloat(document.getElementById('f-price').value);
+  const minYield=parseFloat(document.getElementById('f-yield').value);
+  const opp=getChipVal('opportunity-chips');
+  const zone=getChipVal('zone-chips');
+  const sort=document.getElementById('sort-select').value;
+  filtered=PROPERTIES.filter(p=>{
+    if(search&&!p.commune.toLowerCase().includes(search)&&!p.quartier.toLowerCase().includes(search))return false;
+    if(type&&p.type!==type)return false;
+    if(strategy&&!p.strategy.includes(strategy))return false;
+    if(p.price>maxPrice)return false;
+    if(p.yield<minYield)return false;
+    if(opp&&p.opportunity!==opp)return false;
+    if(zone&&p.zone!==zone)return false;
+    return true;
+  });
+  if(sort==='score')filtered.sort((a,b)=>b.score-a.score);
+  else if(sort==='yield')filtered.sort((a,b)=>b.yield-a.yield);
+  else if(sort==='price-asc')filtered.sort((a,b)=>a.price-b.price);
+  else if(sort==='price-desc')filtered.sort((a,b)=>b.price-a.price);
+  renderList();updateMapMarkers();
+  document.getElementById('results-count').textContent=filtered.length;
+}
+function renderList(){
+  const list=document.getElementById('property-list');list.innerHTML='';
+  filtered.forEach((p,i)=>{
+    const diff=Math.round((p.priceM2-p.marketAvg)/p.marketAvg*100);
+    const diffText=diff<0?diff+'% sous marché':diff===0?'Au marché':'+'+diff+'% sur marché';
+    const diffColor=diff<0?'#4a8c61':diff>5?'#e74c3c':'var(--gris)';
+    const card=document.createElement('div');
+    card.className='prop-card'+(selectedId===p.id?' selected':'');
+    card.style.animationDelay=i*0.04+'s';
+    card.onclick=()=>selectProperty(p.id);
+    card.innerHTML=opportunityBadge(p.opportunity)+
+      '<div class="prop-commune">'+p.commune+' · '+p.quartier+'</div>'+
+      '<div class="prop-title">'+p.type+(p.rooms>0?' T'+p.rooms+' · ':' ')+p.surface+'m²</div>'+
+      '<div class="prop-metrics">'+
+        '<div class="prop-metric"><div class="pm-val gold">'+fmt(p.price)+' €</div><div class="pm-lbl">Prix total</div></div>'+
+        '<div class="prop-metric"><div class="pm-val">'+fmt(p.priceM2)+' €/m²</div><div class="pm-lbl" style="color:'+diffColor+'">'+diffText+'</div></div>'+
+        '<div class="prop-metric"><div class="pm-val green">'+p.yield+'%</div><div class="pm-lbl">Rendement brut</div></div>'+
+      '</div>'+
+      '<div class="prop-score-bar"><div class="prop-score-fill" style="width:'+p.score+'%;background:'+scoreColor(p.score)+'"></div></div>'+
+      '<div style="display:flex;justify-content:space-between;margin-top:0.3rem">'+
+        '<div class="prop-tags">'+p.tags.slice(0,3).map(t=>'<span class="prop-tag">'+t+'</span>').join('')+'</div>'+
+        '<div style="font-family:\'DM Mono\',monospace;font-size:0.65rem;color:'+scoreColor(p.score)+'">Score '+p.score+'</div>'+
+      '</div>';
+    list.appendChild(card);
+  });
+}
+function initMap(){
+  map=L.map('map',{zoomControl:true}).setView([48.15,-1.7],9);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{attribution:'©️ OpenStreetMap ©️ CARTO',subdomains:'abcd',maxZoom:19}).addTo(map);
+  PROPERTIES.forEach(p=>addMarker(p));
+}
+function addMarker(p){
+  const color=markerColor(p.priceM2);
+  const size=p.opportunity==='hot'?16:p.opportunity==='good'?13:10;
+  const icon=L.divIcon({html:'<div style="width:'+size+'px;height:'+size+'px;border-radius:50%;background:'+color+';border:2px solid rgba(255,255,255,0.6);box-shadow:0 0 8px 2px '+color+'80;"></div>',className:'',iconSize:[size,size],iconAnchor:[size/2,size/2]});
+  const marker=L.marker([p.lat,p.lng],{icon}).addTo(map);
+  marker.bindPopup('<div class="popup-commune">'+p.commune+' · '+p.quartier+'</div><div class="popup-title">'+p.type+(p.rooms>0?' T'+p.rooms+' · ':' ')+p.surface+'m²</div><div class="popup-price">'+fmt(p.price)+' €</div><div class="popup-meta">'+fmt(p.priceM2)+' €/m² · Rendement '+p.yield+'% · Score '+p.score+'/100</div><button class="popup-btn" onclick="selectProperty('+p.id+')">Voir le détail →</button>',{maxWidth:220});
+  markers[p.id]=marker;
+}
+function updateMapMarkers(){
+  const filteredIds=new Set(filtered.map(p=>p.id));
+  PROPERTIES.forEach(p=>{const marker=markers[p.id];if(!marker)return;const el=marker.getElement();if(el)el.style.opacity=filteredIds.has(p.id)?'1':'0.15';});
+}
+function selectProperty(id){
+  selectedId=id;renderList();
+  const p=PROPERTIES.find(x=>x.id===id);if(!p)return;
+  map.flyTo([p.lat,p.lng],14,{duration:1});
+  if(markers[id])markers[id].openPopup();
+  const diff=Math.round((p.priceM2-p.marketAvg)/p.marketAvg*100);
+  const diffText=diff<0?diff+'% sous le marché':diff>0?'+'+diff+'% au-dessus':'Au prix du marché';
+  const diffColor=diff<0?'#4a8c61':diff>5?'#e74c3c':'var(--gris)';
+  const maxTrend=Math.max(...p.trend),minTrend=Math.min(...p.trend);
+  const trendBars=p.trend.map(v=>{const h=Math.round(((v-minTrend)/(maxTrend-minTrend+1))*35+5);return'<div class="trend-bar" style="height:'+h+'px" title="'+fmt(v)+' €/m²"></div>';}).join('');
+  const scoreItems=[{label:'Localisation',val:p.scores.location},{label:'Rendement',val:p.scores.rendement},{label:'Marché',val:p.scores.marche},{label:'Liquidité',val:p.scores.liquidite},{label:'État du bien',val:p.scores.travaux}];
+  const scoreHtml=scoreItems.map(s=>{const c=s.val>=80?'#4a8c61':s.val>=60?'#c9a84c':'#e74c3c';return'<div class="score-item"><div class="score-label">'+s.label+'</div><div class="score-bar-wrap"><div class="score-bar-fill" style="width:'+s.val+'%;background:'+c+'"></div></div><div class="score-num">'+s.val+'</div></div>';}).join('');
+  const years=['2019','2020','2021','2022','2023','2024'];
+  const stratLabels={location:'Location nue',meuble:'Meublé LMNP',coloc:'Colocation',airbnb:'Saisonnier',flip:'Achat-revente'};
+  document.getElementById('detail-content').innerHTML=
+    '<button class="detail-close" onclick="closeDetail()">✕</button>'+
+    '<div class="detail-commune">'+p.commune+' · '+p.quartier+'</div>'+
+    '<div class="detail-title">'+p.type+(p.rooms>0?' T'+p.rooms+' · ':' ')+p.surface+' m²</div>'+
+    '<div class="detail-price">'+fmt(p.price)+' €</div>'+
+    '<div class="detail-price-m2">'+fmt(p.priceM2)+' €/m² · <span style="color:'+diffColor+'">'+diffText+'</span></div>'+
+    '<div class="detail-grid">'+
+      '<div class="dg-item"><div class="dg-val green">'+p.yield+'%</div><div class="dg-lbl">Rendement brut</div></div>'+
+      '<div class="dg-item"><div class="dg-val">'+fmt(p.rentEstimate)+' €</div><div class="dg-lbl">Loyer estimé/mois</div></div>'+
+      '<div class="dg-item"><div class="dg-val" style="color:'+scoreColor(p.score)+'">'+p.score+'/100</div><div class="dg-lbl">Score global</div></div>'+
+    '</div>'+
+    '<div style="font-size:0.75rem;color:var(--gris);line-height:1.5;padding:0.8rem;background:rgba(255,255,255,0.03);border-radius:4px;border:1px solid rgba(255,255,255,0.06)">'+p.description+'</div>'+
+    '<div class="detail-section-title">Analyse multi-critères</div>'+
+    '<div class="score-breakdown">'+scoreHtml+'</div>'+
+    '<div class="detail-section-title">Évolution prix/m² (2019–2024)</div>'+
+    '<div class="trend-mini">'+trendBars+'</div>'+
+    '<div class="trend-labels">'+years.map(y=>'<span class="trend-lbl">'+y+'</span>').join('')+'</div>'+
+    '<div class="detail-section-title">Caractéristiques</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0.4rem;font-size:0.72rem;color:var(--gris)">'+
+      '<div>🏗 Construit en <span style="color:var(--creme)">'+p.yearBuilt+'</span></div>'+
+      '<div>⚡ DPE <span style="color:var(--creme)">'+p.dpe+'</span></div>'+
+      '<div>📐 Surface <span style="color:var(--creme)">'+p.surface+' m²</span></div>'+
+      '<div>🏠 '+p.type+'</div>'+
+    '</div>'+
+    '<div class="detail-section-title">Stratégies recommandées</div>'+
+    '<div style="display:flex;flex-wrap:wrap;gap:0.35rem;margin-bottom:0.5rem">'+
+      p.strategy.map(s=>'<span style="padding:0.25rem 0.6rem;background:rgba(201,168,76,0.1);border:1px solid rgba(201,168,76,0.25);border-radius:3px;font-size:0.65rem;color:var(--or)">'+(stratLabels[s]||s)+'</span>').join('')+
+    '</div>'+
+    '<button class="btn-contact">Contacter un agent local →</button>';
+  document.getElementById('detail-panel').classList.add('open');
+}
+function closeDetail(){selectedId=null;document.getElementById('detail-panel').classList.remove('open');renderList();}
+document.addEventListener('DOMContentLoaded',()=>{initMap();filterProperties();});
+</script>
+</body>
+</html>
