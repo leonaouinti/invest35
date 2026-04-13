@@ -420,18 +420,16 @@ input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;hei
       </div>
       <div class="ai-body">
         <!-- API KEY SECTION -->
-        <div class="ai-key-section" id="ai-key-section">
-          <div class="ai-key-label">Clé API Anthropic</div>
-          <div class="ai-key-row">
-            <input class="ai-input" id="ai-key-input" type="password" placeholder="sk-ant-…" style="font-family:'DM Mono',monospace;font-size:0.68rem;">
-            <button class="ai-btn" onclick="saveApiKey()">OK</button>
-          </div>
-          <div class="ai-key-hint">Clé locale uniquement. <a href="https://console.anthropic.com/keys" target="_blank">Obtenir une clé →</a></div>
-        </div>
-        <div class="ai-key-saved" id="ai-key-saved">
-          <span>✓ Clé configurée</span>
-          <span onclick="resetApiKey()">Changer</span>
-        </div>
+       <div class="ai-panel">
+  <h2>AI Panel</h2>
+  <label for="apiKey">API Key:</label>
+  <input type="text" id="apiKey" placeholder="Enter your API Key" style="width: 100%; padding: 10px; margin-bottom: 20px;">
+</div>
+<script>
+  const apiKeyInput = document.getElementById('apiKey');
+  // You can add the functionality to send the API Key with the request
+  // Example: fetch(..., { headers: { 'x-api-key': apiKeyInput.value, 'anthropic-dangerous-direct-browser-access': true } })
+</script>
         <!-- QUICK PROMPTS -->
         <div class="ai-quick-prompts">
           <span class="ai-quick" onclick="askAI(this.textContent)">Meilleur rendement</span>
