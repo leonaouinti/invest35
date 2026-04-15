@@ -1,0 +1,8 @@
+2026-04-15 10:48:32,550 INFO GET 404 https://files.data.gouv.fr/geo-dvf/latest/csv/35.csv.gz
+2026-04-15 10:48:33,531 INFO GET 404 https://static.data.gouv.fr/resources/demandes-de-valeurs-foncieres/20240401-173033/valeursfoncieres-2023.txt.gz
+2026-04-15 10:48:37,067 INFO GET 200 https://www.orpi.com/recherche/buy/?types%5B%5D=house&types%5B%5D=flat&localisation%5B%5D=departement-ille-et-vilaine-35&page=1
+2026-04-15 10:48:45,406 INFO GET 200 https://www.orpi.com/recherche/buy/?types%5B%5D=house&types%5B%5D=flat&localisation%5B%5D=departement-ille-et-vilaine-35&page=2
+2026-04-15 10:48:53,261 INFO GET 200 https://www.orpi.com/recherche/buy/?types%5B%5D=house&types%5B%5D=flat&localisation%5B%5D=departement-ille-et-vilaine-35&page=3
+2026-04-15 10:48:58,764 INFO GET 200 https://www.guy-hoquet.com/biens/result?transaction=Vente&localisation=35&page=1
+2026-04-15 10:49:04,529 INFO GET 200 https://www.guy-hoquet.com/biens/result?transaction=Vente&localisation=35&page=2
+2026-04-15 10:49:08,531 INFO GET 200 https://www.guy-hoquet.com/biens/result?transaction=Vente&localisation=35&page=3

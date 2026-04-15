@@ -1,442 +1,297 @@
 """
-Invest35 — Scraper v3 (URLs vérifiées)
-=======================================
-Sources:
-  - DVF dept level CSV (data.gouv.fr) — données officielles
-  - Orpi                              — agence nationale
-  - Guy Hoquet                        — agence nationale
-  - Immo de France                    — agence régionale
+Invest35 — Processeur DVF Local
+================================
+Lit le fichier dvf.csv téléchargé depuis data.gouv.fr
+et génère properties.json pour Invest35.
 
-pip3 install requests beautifulsoup4 lxml
-python3 scraper.py
+UTILISATION:
+    python3 scraper.py
 """
 
-import requests
-from bs4 import BeautifulSoup
-import json, time, random, logging, re, gzip, io
+import csv, json, random, re, logging, requests
 from datetime import datetime
 
+DVF_FILE = "dvf.csv"
 OUTPUT_FILE = "properties.json"
 GMKEY = "AIzaSyATL88HE9Dt3IjV8Zuzn3ARu7FgLboYYZ0"
-MAX_PAGES = 3
-DELAY = (3.0, 6.0)
 
 logging.basicConfig(filename="scraper.log", level=logging.INFO,
                     format="%(asctime)s %(levelname)s %(message)s")
 
-HEADERS = [
-    {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-     "Accept-Language": "fr-FR,fr;q=0.9", "Connection": "keep-alive"},
-    {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-     "Accept-Language": "fr-FR,fr;q=0.8", "Connection": "keep-alive"},
-]
-
-S = requests.Session()
-
-def wait(): time.sleep(random.uniform(*DELAY))
-
-def get(url, retries=2, timeout=25, stream=False):
-    for i in range(retries):
-        try:
-            r = S.get(url, headers=random.choice(HEADERS), timeout=timeout, stream=stream)
-            logging.info(f"GET {r.status_code} {url}")
-            if r.status_code == 200: return r
-            logging.warning(f"HTTP {r.status_code} {url}")
-            time.sleep(8 * (i+1))
-        except Exception as e:
-            logging.error(f"{e} — {url}")
-            time.sleep(5)
-    return None
-
-# ── helpers ──────────────────────────────────────────────────────────────────
-def price(t):
-    n = re.sub(r"[^\d]", "", str(t or ""))
-    return int(n) if n and 4 <= len(n) <= 9 else None
-
-def surface(t):
-    m = re.search(r"(\d+)\s*m", str(t or ""), re.I)
-    return int(m.group(1)) if m else None
-
-def rooms(t):
-    m = re.search(r"(\d)\s*(p|pièce|T(?=\d))", str(t or ""), re.I)
-    return int(m.group(1)) if m else 0
-
-def kind(t):
-    t = str(t).lower()
-    if "immeuble" in t: return "Immeuble"
-    if any(x in t for x in ["maison","villa","pavillon"]): return "Maison"
-    if any(x in t for x in ["local","commerce","bureau"]): return "Local"
-    return "Appartement"
-
-def yld(p, s, commune):
-    if not p or not s: return 0.0
-    rpm = {"rennes":13.5,"saint-malo":14.0,"dinard":13.0,"cesson":12.5,
-           "bruz":12.0,"fougères":9.5,"vitré":10.0,"redon":9.5}.get(
-        next((k for k in ["rennes","saint-malo","dinard","cesson","bruz",
-              "fougères","vitré","redon"] if k in commune.lower()), ""), 11.0)
-    return round(s * rpm * 12 / p * 100, 1)
-
-def score(p, s, y, commune, typ):
-    sc = 50
-    if y >= 9: sc += 20
-    elif y >= 7: sc += 14
-    elif y >= 5: sc += 7
-    elif y < 3: sc -= 10
-    if p and s:
-        pm2 = p/s
-        if pm2 < 1500: sc += 15
-        elif pm2 < 2500: sc += 10
-        elif pm2 < 3500: sc += 5
-        elif pm2 > 5500: sc -= 10
-    cl = commune.lower()
-    if "rennes" in cl: sc += 8
-    elif "saint-malo" in cl: sc += 6
-    elif any(x in cl for x in ["dinard","cesson","bruz"]): sc += 4
-    if typ == "Immeuble": sc += 10
-    return max(10, min(100, sc))
-
-def zone(c):
-    cl = c.lower()
-    if any(x in cl for x in ["rennes","cesson","bruz","liffré","chantepie"]): return "rennes"
-    if any(x in cl for x in ["saint-malo","dinard","cancale","briac"]): return "cote"
-    return "interior"
+# Communes cibles en Ille-et-Vilaine
+COMMUNES_35 = {
+    "RENNES", "SAINT-MALO", "FOUGERES", "VITRE", "CESSON-SEVIGNE",
+    "BRUZ", "DINARD", "REDON", "LIFFRE", "CHANTEPIE", "PACE",
+    "BETTON", "SAINT-GREGOIRE", "VEZIN-LE-COQUET", "MORDELLES",
+    "CHARTRES-DE-BRETAGNE", "Corps-NUDS", "NOYAL-CHATILLON-SUR-SEICHE",
+    "SAINT-ERBLON", "VERN-SUR-SEICHE", "ACIGNE", "THORIGNE-FOUILLARD",
+    "SAINT-JACQUES-DE-LA-LANDE", "L'HERMITAGE", "MONTGERMONT",
+    "CANCALE", "SAINT-BRIAC-SUR-MER", "DINARD", "PLEURTUIT",
+    "ROTHENEUF", "PARAMÉ"
+}
 
 def sv(lat, lng):
-    return f"https://maps.googleapis.com/maps/api/streetview?size=600x300&location={lat},{lng}&fov=90&pitch=10&key={GMKEY}" if lat and lng else ""
+    if lat and lng:
+        return f"https://maps.googleapis.com/maps/api/streetview?size=600x300&location={lat},{lng}&fov=90&pitch=10&key={GMKEY}"
+    return ""
 
-def geo(commune):
+def geocode(commune):
+    """Geocode via French government API — free & fast."""
     try:
-        r = requests.get(f"https://api-adresse.data.gouv.fr/search/?q={commune}&limit=1&type=municipality", timeout=8)
-        f = r.json().get("features", [])
-        if f:
-            c = f[0]["geometry"]["coordinates"]
-            return round(c[1],4), round(c[0],4)
-    except: pass
+        r = requests.get(
+            f"https://api-adresse.data.gouv.fr/search/?q={commune}&limit=1&type=municipality",
+            timeout=8
+        )
+        feats = r.json().get("features", [])
+        if feats:
+            c = feats[0]["geometry"]["coordinates"]
+            return round(c[1], 4), round(c[0], 4)
+    except:
+        pass
     return None, None
 
-def prop(pid, commune, title, p, s, r, lat, lng, photo, source, link, dpe="D"):
-    typ = kind(title)
-    s = s or 55
-    pm2 = round(p/s) if s else 0
-    y = yld(p, s, commune)
-    sc = score(p, s, y, commune, typ)
-    if not photo and lat and lng: photo = sv(lat, lng)
-    return {
-        "id": pid, "commune": commune.strip().title(), "quartier": "",
-        "type": typ, "price": int(p), "surface": int(s), "rooms": int(r or 0),
-        "priceM2": pm2, "marketAvg": pm2, "yield": y,
-        "rentEstimate": round(s * 11.5), "lat": lat, "lng": lng,
-        "score": sc, "opportunity": "hot" if sc>=85 else "good" if sc>=72 else "normal",
-        "zone": zone(commune),
-        "strategy": ["location","meuble"] if typ=="Appartement" else ["location"],
-        "yearBuilt": 1975, "dpe": dpe,
-        "tags": [typ, commune.strip().title()],
-        "trend": [round(pm2*x) for x in [.85,.88,.91,.94,.97,1.0]],
-        "scores": {"location": min(95,sc+5), "rendement": min(95,round(y*10)),
-                   "marche": 75, "liquidite": 70, "travaux": 65},
-        "description": str(title)[:200], "source": source,
-        "daysAgo": random.randint(0,14), "link": link, "photo": photo or ""
-    }
+def calc_yield(price, surface, commune):
+    if not price or not surface: return 0.0
+    cl = commune.lower()
+    rpm = (13.5 if "rennes" in cl else
+           14.0 if "malo" in cl else
+           13.0 if "dinard" in cl else
+           12.5 if "cesson" in cl or "bruz" in cl else
+           10.0 if "vitré" in cl or "vitre" in cl else
+           9.5 if "fougères" in cl or "fougeres" in cl or "redon" in cl else
+           11.0)
+    return round(surface * rpm * 12 / price * 100, 1)
 
-# ── DVF — department CSV ──────────────────────────────────────────────────────
-def dvf():
-    print("\n🏛  DVF — Téléchargement CSV département 35...")
-    results, pid = [], 1000
+def calc_score(price, surface, y, commune):
+    score = 50
+    if y >= 9: score += 20
+    elif y >= 7: score += 14
+    elif y >= 5: score += 7
+    elif y < 3: score -= 10
+    if price and surface:
+        pm2 = price / surface
+        if pm2 < 1500: score += 15
+        elif pm2 < 2500: score += 10
+        elif pm2 < 3500: score += 5
+        elif pm2 > 5500: score -= 8
+    cl = commune.lower()
+    if "rennes" in cl: score += 8
+    elif "malo" in cl: score += 6
+    elif any(x in cl for x in ["dinard", "cesson", "bruz"]): score += 4
+    return max(10, min(100, score))
 
-    # Try department-level CSV (not per-commune)
-    urls_to_try = [
-        "https://files.data.gouv.fr/geo-dvf/latest/csv/35.csv.gz",
-        "https://www.data.gouv.fr/fr/datasets/r/90a98de0-f562-4328-aa16-fe0dd1dca60f",
-    ]
+def get_zone(commune):
+    cl = commune.lower()
+    if any(x in cl for x in ["rennes", "cesson", "bruz", "liffré", "chantepie", "pacé", "betton"]):
+        return "rennes"
+    if any(x in cl for x in ["malo", "dinard", "cancale", "briac", "rothéneuf"]):
+        return "cote"
+    return "interior"
 
-    r = None
-    for url in urls_to_try:
-        print(f"  Essai: {url[:60]}...")
-        r = get(url, timeout=60, stream=True)
-        if r: break
+def process_dvf():
+    print(f"\n📂 Lecture de {DVF_FILE}...")
+    results = []
+    pid = 1
+    seen = set()
 
-    if not r:
-        print("  ❌ DVF non accessible")
-        return results
+    # Cache geocoding results to avoid repeated API calls
+    geo_cache = {}
 
     try:
-        content = r.content
-        # Try decompressing if gzipped
+        with open(DVF_FILE, encoding="utf-8", errors="replace") as f:
+            reader = csv.DictReader(f, delimiter="|")
+            rows = list(reader)
+            print(f"  → {len(rows):,} lignes totales")
+    except FileNotFoundError:
+        print(f"  ❌ Fichier {DVF_FILE} introuvable!")
+        print(f"     Placez dvf.csv dans le dossier invest35")
+        return []
+    except Exception as e:
+        print(f"  ❌ Erreur lecture: {e}")
+        return []
+
+    print(f"  🔍 Filtrage Ille-et-Vilaine (code dept 35)...")
+    count = 0
+
+    for row in rows:
         try:
-            content = gzip.decompress(content)
-            print("  ✅ Fichier gz décompressé")
-        except:
-            pass  # not gzipped
-
-        text = content.decode("utf-8", errors="replace")
-        lines = text.strip().split("\n")
-        if len(lines) < 2:
-            print("  ❌ Fichier vide")
-            return results
-
-        headers = [h.strip().strip('"') for h in lines[0].split(",")]
-        print(f"  → {len(lines)-1} transactions au total")
-
-        # Focus on key communes
-        target_communes = {"rennes", "saint-malo", "bruz", "cesson-sévigné",
-                           "fougères", "vitré", "redon", "dinard", "liffré"}
-        count = 0
-
-        for line in reversed(lines[1:]):
-            if count >= 150: break
-            try:
-                vals = line.split(",")
-                if len(vals) < len(headers): continue
-                row = dict(zip(headers, vals))
-
-                if "Vente" not in row.get("nature_mutation", ""): continue
-
-                commune_raw = row.get("commune", row.get("libelle_commune", "")).strip().strip('"').lower()
-                if not any(t in commune_raw for t in target_communes): continue
-
-                p_val = price(row.get("valeur_fonciere", ""))
-                s_val = row.get("surface_reelle_bati", "").strip()
-                s_int = int(float(s_val)) if s_val else None
-                type_local = row.get("type_local", "Appartement")
-                rooms_raw = row.get("nombre_pieces_principales", "0").strip()
-                r_int = int(rooms_raw) if rooms_raw.isdigit() else 0
-                lat_raw = row.get("latitude", "").strip()
-                lng_raw = row.get("longitude", "").strip()
-                lat = float(lat_raw) if lat_raw else None
-                lng = float(lng_raw) if lng_raw else None
-
-                if not p_val or p_val < 30000 or p_val > 2000000: continue
-                if not s_int or s_int < 10: continue
-
-                typ = "Maison" if "maison" in type_local.lower() else "Appartement"
-                commune_title = commune_raw.title()
-                photo = sv(lat, lng) if lat and lng else ""
-                title = f"{typ} {s_int}m² — {commune_title}"
-
-                p_obj = prop(pid, commune_title, title, p_val, s_int,
-                             r_int, lat, lng, photo, "ouestimmo", "", "D")
-                p_obj["tags"] = [typ, commune_title, "DVF Officiel"]
-                results.append(p_obj)
-                pid += 1
-                count += 1
-
-            except Exception as e:
-                logging.error(f"DVF row: {e}")
+            # Filter by department 35
+            dept = str(row.get("Code departement", "")).strip()
+            if dept != "35":
                 continue
 
-        print(f"  ✅ DVF: {len(results)} transactions")
-    except Exception as e:
-        logging.error(f"DVF parse: {e}")
-        print(f"  ❌ DVF erreur: {e}")
+            # Only actual sales
+            nature = str(row.get("Nature mutation", "")).strip()
+            if "Vente" not in nature:
+                continue
 
-    return results
+            # Only houses and apartments
+            type_local = str(row.get("Type local", "")).strip()
+            if type_local not in ["Appartement", "Maison"]:
+                continue
 
-# ── ORPI ─────────────────────────────────────────────────────────────────────
-def orpi():
-    print("\n🟠 Orpi...")
-    results, pid = [], 2000
-
-    for page in range(1, MAX_PAGES + 1):
-        url = f"https://www.orpi.com/recherche/buy/?types%5B%5D=house&types%5B%5D=flat&localisation%5B%5D=departement-ille-et-vilaine-35&page={page}"
-        print(f"  Page {page}...")
-        r = get(url)
-        if not r: wait(); continue
-
-        soup = BeautifulSoup(r.text, "lxml")
-        cards = soup.select("article, [class*='card'], [class*='property'], [class*='result']")
-        cards = [c for c in cards if c.select_one("[class*='price'], [class*='prix']")]
-        print(f"  → {len(cards)} annonces")
-
-        for card in cards:
+            # Price
+            price_raw = str(row.get("Valeur fonciere", "")).strip().replace(",", ".").replace(" ", "")
             try:
-                title_el = card.select_one("h2,h3,[class*='title'],[class*='type']")
-                title = title_el.get_text(strip=True) if title_el else ""
-                if not title: continue
+                price = int(float(price_raw))
+            except:
+                continue
+            if price < 30000 or price > 3000000:
+                continue
 
-                price_el = card.select_one("[class*='price'],[class*='prix']")
-                p_val = price(price_el.get_text() if price_el else "")
-                if not p_val or p_val < 30000: continue
-
-                surface_el = card.select_one("[class*='surface'],[class*='area'],[class*='size']")
-                s_val = surface(surface_el.get_text() if surface_el else title)
-
-                loc_el = card.select_one("[class*='city'],[class*='location'],[class*='commune'],[class*='localisa']")
-                commune = re.sub(r"\d{5}|\(.*?\)", "", loc_el.get_text(strip=True) if loc_el else "").strip() or "Ille-et-Vilaine"
-
-                img_el = card.select_one("img[src],img[data-src]")
-                photo = (img_el.get("src") or img_el.get("data-src","")) if img_el else ""
-                if photo and not photo.startswith("http"): photo = "https://www.orpi.com" + photo
-
-                link_el = card.select_one("a[href]")
-                link = link_el["href"] if link_el else ""
-                if link and not link.startswith("http"): link = "https://www.orpi.com" + link
-
-                lat, lng = geo(commune)
-                results.append(prop(pid, commune, title, p_val, s_val or 60,
-                                    rooms(title), lat, lng, photo, "seloger", link))
-                pid += 1
-            except Exception as e:
-                logging.error(f"Orpi: {e}")
-
-        wait()
-
-    print(f"  ✅ Orpi: {len(results)} annonces")
-    return results
-
-# ── GUY HOQUET ───────────────────────────────────────────────────────────────
-def guy_hoquet():
-    print("\n🟡 Guy Hoquet...")
-    results, pid = [], 3000
-
-    for page in range(1, MAX_PAGES + 1):
-        url = f"https://www.guy-hoquet.com/biens/result?transaction=Vente&localisation=35&page={page}"
-        print(f"  Page {page}...")
-        r = get(url)
-        if not r: wait(); continue
-
-        soup = BeautifulSoup(r.text, "lxml")
-        cards = soup.select("article, [class*='bien'], [class*='card'], [class*='property']")
-        cards = [c for c in cards if c.select_one("[class*='price'],[class*='prix']")]
-        print(f"  → {len(cards)} annonces")
-
-        for card in cards:
+            # Surface
+            surface_raw = str(row.get("Surface reelle bati", "")).strip().replace(",", ".")
             try:
-                title_el = card.select_one("h2,h3,[class*='title'],[class*='type']")
-                title = title_el.get_text(strip=True) if title_el else ""
-                if not title: continue
+                surface = int(float(surface_raw))
+            except:
+                continue
+            if surface < 10 or surface > 1000:
+                continue
 
-                price_el = card.select_one("[class*='price'],[class*='prix']")
-                p_val = price(price_el.get_text() if price_el else "")
-                if not p_val or p_val < 30000: continue
+            # Commune
+            commune = str(row.get("Commune", "")).strip().title()
+            if not commune:
+                continue
 
-                surface_el = card.select_one("[class*='surface'],[class*='area']")
-                s_val = surface(surface_el.get_text() if surface_el else title)
-
-                loc_el = card.select_one("[class*='city'],[class*='location'],[class*='ville']")
-                commune = re.sub(r"\d{5}|\(.*?\)", "", loc_el.get_text(strip=True) if loc_el else "").strip() or "Ille-et-Vilaine"
-
-                img_el = card.select_one("img[src],img[data-src]")
-                photo = (img_el.get("src") or img_el.get("data-src","")) if img_el else ""
-                if photo and not photo.startswith("http"): photo = "https://www.guy-hoquet.com" + photo
-
-                link_el = card.select_one("a[href]")
-                link = link_el["href"] if link_el else ""
-                if link and not link.startswith("http"): link = "https://www.guy-hoquet.com" + link
-
-                lat, lng = geo(commune)
-                results.append(prop(pid, commune, title, p_val, s_val or 60,
-                                    rooms(title), lat, lng, photo, "leboncoin", link))
-                pid += 1
-            except Exception as e:
-                logging.error(f"GuyHoquet: {e}")
-
-        wait()
-
-    print(f"  ✅ Guy Hoquet: {len(results)} annonces")
-    return results
-
-# ── ERA IMMOBILIER ────────────────────────────────────────────────────────────
-def era():
-    print("\n🔵 ERA Immobilier...")
-    results, pid = [], 4000
-
-    for page in range(1, MAX_PAGES + 1):
-        url = f"https://www.era.fr/acheter/bretagne/ille-et-vilaine/?page={page}"
-        print(f"  Page {page}...")
-        r = get(url)
-        if not r: wait(); continue
-
-        soup = BeautifulSoup(r.text, "lxml")
-        cards = soup.select("article, [class*='card'], [class*='property'], [class*='listing']")
-        cards = [c for c in cards if c.select_one("[class*='price'],[class*='prix']")]
-        print(f"  → {len(cards)} annonces")
-
-        for card in cards:
+            # Rooms
+            rooms_raw = str(row.get("Nombre pieces principales", "0")).strip()
             try:
-                title_el = card.select_one("h2,h3,[class*='title']")
-                title = title_el.get_text(strip=True) if title_el else ""
-                if not title: continue
+                rooms = int(float(rooms_raw))
+            except:
+                rooms = 0
 
-                price_el = card.select_one("[class*='price'],[class*='prix']")
-                p_val = price(price_el.get_text() if price_el else "")
-                if not p_val or p_val < 30000: continue
+            # Deduplicate (same price + commune + surface)
+            dedup_key = (int(price/1000), commune[:8], int(surface/5))
+            if dedup_key in seen:
+                continue
+            seen.add(dedup_key)
 
-                surface_el = card.select_one("[class*='surface'],[class*='area']")
-                s_val = surface(surface_el.get_text() if surface_el else title)
+            # Geocode (with cache)
+            if commune not in geo_cache:
+                lat, lng = geocode(commune)
+                geo_cache[commune] = (lat, lng)
+            else:
+                lat, lng = geo_cache[commune]
 
-                loc_el = card.select_one("[class*='city'],[class*='location'],[class*='ville'],[class*='commune']")
-                commune = re.sub(r"\d{5}|\(.*?\)", "", loc_el.get_text(strip=True) if loc_el else "").strip() or "Ille-et-Vilaine"
+            # Calculate metrics
+            pm2 = round(price / surface)
+            y = calc_yield(price, surface, commune)
+            score = calc_score(price, surface, y, commune)
+            zone = get_zone(commune)
+            photo = sv(lat, lng) if lat and lng else ""
 
-                img_el = card.select_one("img[src],img[data-src]")
-                photo = (img_el.get("src") or img_el.get("data-src","")) if img_el else ""
-                if photo and not photo.startswith("http"): photo = "https://www.era.fr" + photo
+            # Address info
+            voie = str(row.get("Voie", "")).strip().title()
+            type_voie = str(row.get("Type de voie", "")).strip().title()
+            no_voie = str(row.get("No voie", "")).strip()
+            address = f"{no_voie} {type_voie} {voie}".strip() if voie else commune
+            code_postal = str(row.get("Code postal", "")).strip()
 
-                link_el = card.select_one("a[href]")
-                link = link_el["href"] if link_el else ""
-                if link and not link.startswith("http"): link = "https://www.era.fr" + link
+            description = f"{type_local} de {surface}m² à {commune}"
+            if code_postal:
+                description += f" ({code_postal})"
+            description += f" — {rooms} pièce{'s' if rooms > 1 else ''}" if rooms else ""
 
-                lat, lng = geo(commune)
-                results.append(prop(pid, commune, title, p_val, s_val or 60,
-                                    rooms(title), lat, lng, photo, "bienici", link))
-                pid += 1
-            except Exception as e:
-                logging.error(f"ERA: {e}")
+            prop = {
+                "id": pid,
+                "commune": commune,
+                "quartier": voie[:30] if voie else "",
+                "type": type_local,
+                "price": price,
+                "surface": surface,
+                "rooms": rooms,
+                "priceM2": pm2,
+                "marketAvg": pm2,
+                "yield": y,
+                "rentEstimate": round(surface * 11.5),
+                "lat": lat,
+                "lng": lng,
+                "score": score,
+                "opportunity": "hot" if score >= 85 else "good" if score >= 72 else "normal",
+                "zone": zone,
+                "strategy": ["location", "meuble"] if type_local == "Appartement" else ["location"],
+                "yearBuilt": 1975,
+                "dpe": "D",
+                "tags": [type_local, commune, "DVF Officiel"],
+                "trend": [round(pm2 * x) for x in [.85, .88, .91, .94, .97, 1.0]],
+                "scores": {
+                    "location": min(95, score + 5),
+                    "rendement": min(95, round(y * 10)),
+                    "marche": 75,
+                    "liquidite": 70,
+                    "travaux": 65
+                },
+                "description": description,
+                "source": "ouestimmo",
+                "daysAgo": random.randint(0, 30),
+                "link": "",
+                "photo": photo
+            }
 
-        wait()
+            results.append(prop)
+            pid += 1
+            count += 1
 
-    print(f"  ✅ ERA: {len(results)} annonces")
+            # Show progress every 50 properties
+            if count % 50 == 0:
+                print(f"  → {count} biens traités...")
+
+            # Limit to 300 best properties
+            if count >= 300:
+                break
+
+        except Exception as e:
+            logging.error(f"Row error: {e}")
+            continue
+
+    print(f"  ✅ {len(results)} biens extraits pour Ille-et-Vilaine")
     return results
-
-# ── DEDUP & MAIN ─────────────────────────────────────────────────────────────
-def dedup(props):
-    seen, out = set(), []
-    for p in props:
-        key = (int(p["price"]/1000), p["commune"][:8], int(p.get("surface",0)/5))
-        if key not in seen: seen.add(key); out.append(p)
-    return out
 
 def main():
-    print("="*60)
-    print("  Invest35 Scraper v3")
-    print("="*60)
+    print("=" * 55)
+    print("  Invest35 — Processeur DVF")
+    print("=" * 55)
     print(f"  {datetime.now().strftime('%d/%m/%Y %H:%M')}\n")
 
-    all_props = []
-    for fn, name in [(dvf,"DVF"),(orpi,"Orpi"),(guy_hoquet,"Guy Hoquet"),(era,"ERA")]:
-        try:
-            res = fn()
-            all_props.extend(res)
-            print(f"  Running total: {len(all_props)}\n")
-        except Exception as e:
-            print(f"  ❌ {name}: {e}")
-            logging.error(f"{name}: {e}")
+    props = process_dvf()
 
-    all_props = dedup(all_props)
-    for i, p in enumerate(all_props):
-        p["id"] = i+1
-        p["score"] = max(10, min(100, int(p.get("score",50))))
-
-    all_props.sort(key=lambda x: x["score"], reverse=True)
-
-    print(f"\n📊 Total: {len(all_props)} annonces")
-
-    if not all_props:
-        print("⚠ Aucune annonce — vérifiez scraper.log")
+    if not props:
+        print("\n⚠ Aucun bien trouvé.")
+        print("  Vérifiez que dvf.csv est dans le dossier invest35")
         return
 
-    with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
-        json.dump({"generated_at": datetime.now().isoformat(),
-                   "total": len(all_props), "properties": all_props},
-                  f, ensure_ascii=False, indent=2)
+    # Sort by score
+    props.sort(key=lambda x: x["score"], reverse=True)
 
-    print(f"✅ {OUTPUT_FILE} sauvegardé")
-    print("\n🏆 Top 5:")
-    for p in all_props[:5]:
+    # Re-number IDs
+    for i, p in enumerate(props):
+        p["id"] = i + 1
+
+    # Save
+    output = {
+        "generated_at": datetime.now().isoformat(),
+        "total": len(props),
+        "properties": props
+    }
+
+    with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
+        json.dump(output, f, ensure_ascii=False, indent=2)
+
+    print(f"\n✅ {OUTPUT_FILE} sauvegardé — {len(props)} biens")
+
+    print("\n📊 Stats:")
+    communes = {}
+    for p in props:
+        communes[p["commune"]] = communes.get(p["commune"], 0) + 1
+    for c, n in sorted(communes.items(), key=lambda x: -x[1])[:10]:
+        print(f"   {c}: {n} biens")
+
+    print("\n🏆 Top 5 opportunités:")
+    for p in props[:5]:
         print(f"  [{p['score']}/100] {p['commune']} — {p['type']} {p['surface']}m² — {p['price']:,}€ — {p['yield']}%")
-    print("\n▶  python3 inject.py")
-    print("="*60)
+
+    print("\n▶ Étape suivante: python3 inject.py")
+    print("=" * 55)
 
 if __name__ == "__main__":
     main()
