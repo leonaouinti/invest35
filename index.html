@@ -433,7 +433,7 @@ input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;hei
         <span class="source-chip src-leboncoin active" data-src="leboncoin" onclick="toggleSource(this)">LeBonCoin</span>
         <span class="source-chip src-pap active" data-src="pap" onclick="toggleSource(this)">PAP</span>
         <span class="source-chip src-bienici active" data-src="bienici" onclick="toggleSource(this)">BienIci</span>
-        <span class="source-chip src-ouestimmo active" data-src="ouestimmo" onclick="toggleSource(this)">Ouest Immo</span>
+        <span class="source-chip src-ouestimmo active" data-src="ouestimmo" onclick="toggleSource(this)">OuestFrance</span>
       </div>
     </div>
     <div class="search-area">
@@ -595,7 +595,8 @@ const SOURCE_COLORS = {
   leboncoin:{color:'#f56b2a',cls:'src-leboncoin'},
   pap:{color:'#e91e8c',cls:'src-pap'},
   bienici:{color:'#00b16a',cls:'src-bienici'},
-  ouestimmo:{color:'#c9a84c',cls:'src-ouestimmo'}
+  ouestimmo:{color:'#c9a84c',cls:'src-ouestimmo'},
+  ouestfrance:{color:'#c9a84c',cls:'src-ouestimmo'}
 };
 
 const GMKEY="AIzaSyATL88HE9Dt3IjV8Zuzn3ARu7FgLboYYZ0";
@@ -1036,9 +1037,9 @@ function siteLinks(p) {
       url: `https://www.bienici.com/recherche/achat/${commune.toLowerCase()}/appartement,maison?prix-max=${pMax}&surface-min=${sMin}`
     },
     {
-      name: 'MeilleursAgents',
+      name: 'OuestFrance',
       color: '#c9a84c',
-      url: `https://www.meilleursagents.com/prix-immobilier/${commune.toLowerCase().replace(/ /g,'-')}-${p.commune.slice(0,5)}/`
+      url: `https://www.ouestfrance-immo.com/immobilier/achat/${commune.toLowerCase()}/`
     },
     {
       name: 'Orpi',
