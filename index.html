@@ -1132,6 +1132,7 @@ function initMap(){
   PROPERTIES.forEach(addMarker);
 }
 function addMarker(p){
+  if(!p.lat||!p.lng)return;
   const color=markerColor(p.priceM2);
   const size=p.opportunity==='hot'?16:p.opportunity==='good'?13:10;
   const icon=L.divIcon({html:`<div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};border:2.5px solid #fff;box-shadow:0 2px 8px ${color}60"></div>`,className:'',iconSize:[size,size],iconAnchor:[size/2,size/2]});
