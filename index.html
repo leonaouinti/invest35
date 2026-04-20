@@ -7,6 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=Outfit:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
 :root {
   --bg: #F7F5F0;
@@ -403,6 +404,42 @@ input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;hei
 @keyframes toastIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
 @keyframes toastOut{from{opacity:1;}to{opacity:0;transform:translateY(4px);}}
 @keyframes fadeUp{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+
+/* ── EXPORT BUTTON ───────────────────────────────────────── */
+.export-btn{padding:0.28rem 0.6rem;background:transparent;border:1.5px solid var(--border);border-radius:5px;font-size:0.62rem;color:var(--muted);cursor:pointer;font-family:'JetBrains Mono',monospace;transition:all 0.18s;white-space:nowrap;}
+.export-btn:hover{border-color:var(--emerald);color:var(--emerald);}
+.export-menu{position:absolute;top:100%;right:0;background:var(--bg2);border:1px solid var(--border);border-radius:7px;box-shadow:var(--shadow-lg);z-index:500;min-width:140px;overflow:hidden;margin-top:4px;}
+.export-menu-item{padding:0.5rem 0.9rem;font-size:0.72rem;color:var(--text);cursor:pointer;transition:background 0.15s;display:flex;align-items:center;gap:0.5rem;}
+.export-menu-item:hover{background:var(--bg3);}
+.results-header-right{display:flex;align-items:center;gap:0.5rem;position:relative;}
+
+/* ── MOBILE RESPONSIVE ───────────────────────────────────── */
+@media (max-width: 768px) {
+  header{padding:0 0.8rem;height:auto;flex-wrap:wrap;gap:0.4rem;padding-top:0.6rem;padding-bottom:0.6rem;}
+  .header-stats{display:none;}
+  .logo-sub{display:none;}
+  .header-actions{gap:0.3rem;}
+  .hbtn{padding:0.35rem 0.6rem;font-size:0.65rem;}
+  .tabs{padding:0 0.5rem;overflow-x:auto;gap:0;}
+  .tab{padding:0.6rem 0.8rem;font-size:0.65rem;letter-spacing:0.02em;white-space:nowrap;}
+  .tab-content.active{grid-template-columns:1fr;height:auto;}
+  .sidebar{max-height:none;border-right:none;border-bottom:1px solid var(--border);}
+  .map-area{height:50vh;}
+  #map{height:50vh;}
+  .detail-panel{width:100%;left:0;right:0;max-height:70vh;border-left:none;}
+  .ai-panel{width:calc(100% - 1.6rem);right:0.8rem;}
+  .calc-layout{grid-template-columns:1fr;height:auto;}
+  .calc-panel{border-right:none;border-bottom:1px solid var(--border);}
+  .market-kpi-grid{grid-template-columns:1fr 1fr;}
+  .market-chart-grid{grid-template-columns:1fr;}
+  .market-wrap{padding:1rem;}
+  .favs-grid{grid-template-columns:1fr;}
+  .compare-box{padding:1rem;width:95vw;}
+  .live-ticker{display:none;}
+  .result-grid{grid-template-columns:1fr 1fr;}
+  .kpi-grid{grid-template-columns:repeat(3,1fr);}
+  .site-links{grid-template-columns:1fr 1fr;}
+}
 </style>
 </head>
 <body>
@@ -471,7 +508,14 @@ input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;hei
     </div>
     <div class="results-header">
       <div class="results-count"><span id="results-count">0</span> résultats</div>
-      <select class="sort-select" id="sort-select" onchange="filterProperties()"><option value="score">↓ Score</option><option value="yield">↓ Rendement</option><option value="price-asc">↑ Prix</option><option value="price-desc">↓ Prix</option><option value="new">🆕 Récents</option></select>
+      <div class="results-header-right">
+        <select class="sort-select" id="sort-select" onchange="filterProperties()"><option value="score">↓ Score</option><option value="yield">↓ Rendement</option><option value="price-asc">↑ Prix</option><option value="price-desc">↓ Prix</option><option value="new">🆕 Récents</option></select>
+        <button class="export-btn" onclick="toggleExportMenu(event)">⬇ Export</button>
+        <div class="export-menu" id="export-menu" style="display:none">
+          <div class="export-menu-item" onclick="exportCSV()">📄 CSV</div>
+          <div class="export-menu-item" onclick="exportPDF()">📑 PDF</div>
+        </div>
+      </div>
     </div>
     <div class="property-list" id="property-list"></div>
   </div>
@@ -580,8 +624,8 @@ input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;hei
       <div class="market-kpi"><div class="market-kpi-label">Transactions 2024</div><div class="market-kpi-val">12 840</div><div class="market-kpi-trend" style="color:var(--ruby)">▼ -6.2% vs 2023</div></div>
     </div>
     <div class="market-chart-grid">
-      <div class="market-chart-box"><div class="market-chart-title">Prix/m² par commune (€)</div><div id="commune-chart"></div></div>
-      <div class="market-chart-box"><div class="market-chart-title">Rendement brut moyen par type</div><div id="yield-chart"></div></div>
+      <div class="market-chart-box"><div class="market-chart-title">Prix/m² par commune (€)</div><canvas id="commune-chart" height="220"></canvas></div>
+      <div class="market-chart-box"><div class="market-chart-title">Rendement brut moyen par type</div><canvas id="yield-chart" height="220"></canvas></div>
     </div>
     <div class="market-table-box">
       <div class="market-chart-title">Tableau comparatif des communes</div>
@@ -15305,7 +15349,7 @@ function addMarker(p){
   const size=p.opportunity==='hot'?16:p.opportunity==='good'?13:10;
   const icon=L.divIcon({html:`<div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};border:2.5px solid #fff;box-shadow:0 2px 8px ${color}60"></div>`,className:'',iconSize:[size,size],iconAnchor:[size/2,size/2]});
   const m=L.marker([p.lat,p.lng],{icon}).addTo(map);
-  m.bindPopup(`<div class="popup-commune">${p.commune}</div><div class="popup-title">${p.type}${p.rooms>0?' T'+p.rooms+' · ':' '}${p.surface}m²</div><div class="popup-price">${fmt(p.price)} €</div><div class="popup-meta">${fmt(p.priceM2)} €/m² · ${p.yield}% rdt · Score ${p.score}</div><button class="popup-btn" onclick="selectProperty(${p.id})">Voir le détail →</button>`,{maxWidth:210});
+  m.bindPopup(`<div class="popup-commune">${p.commune}</div><div class="popup-title">${p.type}${p.rooms>0?' T'+p.rooms+' · ':' '}${p.surface}m²</div><div class="popup-price">${fmt(p.price)} €</div><div class="popup-meta">${fmt(p.priceM2)} €/m² · ${p.yield}% rdt · Score ${p.score}</div><button class="popup-btn" onclick="selectProperty(${p.id})">Voir le détail →</button><a href="https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lng}" target="_blank" style="display:block;margin-top:0.4rem;text-align:center;font-size:0.6rem;color:var(--muted);text-decoration:none;padding:0.2rem 0;">📍 Voir sur Google Maps</a>`,{maxWidth:210});
   markers[p.id]=m;
 }
 function updateMapMarkers(){
@@ -15519,14 +15563,42 @@ function calcROI(){
     <div class="verdict ${vClass}"><span class="verdict-icon">${vIcon}</span>${vText}</div>`;
 }
 
+let communeChart=null, yieldChart=null;
 function renderMarket(){
-  const cc=document.getElementById('commune-chart');
-  const maxP=Math.max(...MARKET_DATA.map(d=>d.prix));
-  cc.innerHTML=MARKET_DATA.map(d=>`<div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:0.45rem"><div style="font-size:0.65rem;color:var(--muted);width:110px;flex-shrink:0;text-align:right">${d.commune}</div><div style="flex:1;height:16px;background:var(--bg3);border-radius:3px;overflow:hidden"><div style="height:100%;width:${Math.round(d.prix/maxP*100)}%;background:${d.prix>4000?'var(--ruby)':d.prix>2500?'var(--amber)':'var(--emerald)'};border-radius:3px;"></div></div><div style="font-family:'JetBrains Mono',monospace;font-size:0.64rem;color:var(--text);width:55px">${d.prix.toLocaleString('fr-FR')}€</div></div>`).join('');
-  const yc=document.getElementById('yield-chart');
-  const yieldData=[{l:'Immeuble de rapport',v:9.1},{l:'Colocation',v:7.8},{l:'LMNP Meublé',v:6.9},{l:'Location nue',v:5.6},{l:'Saisonnier',v:6.4},{l:'Achat-revente',v:8.2}];
-  const maxY=Math.max(...yieldData.map(d=>d.v));
-  yc.innerHTML=yieldData.map(d=>`<div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:0.45rem"><div style="font-size:0.62rem;color:var(--muted);width:130px;flex-shrink:0;text-align:right">${d.l}</div><div style="flex:1;height:16px;background:var(--bg3);border-radius:3px;overflow:hidden"><div style="height:100%;width:${Math.round(d.v/maxY*100)}%;background:var(--emerald);border-radius:3px;"></div></div><div style="font-family:'JetBrains Mono',monospace;font-size:0.64rem;color:var(--emerald);width:35px">${d.v}%</div></div>`).join('');
+  // Commune price chart
+  const ccCanvas=document.getElementById('commune-chart');
+  if(communeChart){communeChart.destroy();}
+  communeChart=new Chart(ccCanvas,{
+    type:'bar',
+    data:{
+      labels:MARKET_DATA.map(d=>d.commune),
+      datasets:[{
+        label:'Prix/m² (€)',
+        data:MARKET_DATA.map(d=>d.prix),
+        backgroundColor:MARKET_DATA.map(d=>d.prix>4000?'rgba(181,49,31,0.7)':d.prix>2500?'rgba(196,135,58,0.7)':'rgba(42,96,72,0.7)'),
+        borderRadius:4,borderSkipped:false,
+      }]
+    },
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.parsed.y.toLocaleString('fr-FR')} €/m²`}}},scales:{x:{grid:{display:false},ticks:{font:{size:10},color:'#8a8780'}},y:{grid:{color:'#E8E4DC'},ticks:{font:{size:10},color:'#8a8780',callback:v=>v.toLocaleString('fr-FR')+'€'}}}}
+  });
+  // Yield chart
+  const ycCanvas=document.getElementById('yield-chart');
+  if(yieldChart){yieldChart.destroy();}
+  const yieldData=[{l:'Immeuble',v:9.1},{l:'Colocation',v:7.8},{l:'LMNP Meublé',v:6.9},{l:'Saisonnier',v:6.4},{l:'Location nue',v:5.6},{l:'Achat-revente',v:8.2}];
+  yieldChart=new Chart(ycCanvas,{
+    type:'bar',
+    data:{
+      labels:yieldData.map(d=>d.l),
+      datasets:[{
+        label:'Rendement brut (%)',
+        data:yieldData.map(d=>d.v),
+        backgroundColor:'rgba(42,96,72,0.7)',
+        borderRadius:4,borderSkipped:false,
+      }]
+    },
+    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.parsed.x}%`}}},scales:{x:{grid:{color:'#E8E4DC'},ticks:{font:{size:10},color:'#8a8780',callback:v=>v+'%'}},y:{grid:{display:false},ticks:{font:{size:10},color:'#8a8780'}}}}
+  });
+  // Market table
   const tbody=document.getElementById('market-table');
   tbody.innerHTML=MARKET_DATA.map(d=>{
     const evolColor=d.evol>4?'var(--emerald)':d.evol>2?'var(--amber)':'var(--ruby)';
@@ -15547,6 +15619,56 @@ function refreshData(){
   const btn=document.querySelector('.hbtn-outline');
   btn.textContent='⟳ Actualisation…';
   setTimeout(()=>{btn.textContent='⟳ Actualiser';filterProperties();},1500);
+}
+
+// ── EXPORT ────────────────────────────────────────────────────────────────────
+function toggleExportMenu(e){
+  e.stopPropagation();
+  const m=document.getElementById('export-menu');
+  m.style.display=m.style.display==='none'?'block':'none';
+}
+document.addEventListener('click',()=>{
+  const m=document.getElementById('export-menu');
+  if(m)m.style.display='none';
+});
+
+function exportCSV(){
+  const headers=['ID','Commune','Type','Surface','Prix','Prix/m²','Rendement','Loyer estimé','Score','Opportunité','Zone','DPE'];
+  const rows=filtered.map(p=>[p.id,p.commune,p.type,p.surface,p.price,p.priceM2,p.yield,p.rentEstimate,p.score,p.opportunity,p.zone,p.dpe]);
+  const csv=[headers,...rows].map(r=>r.map(v=>`"${v}"`).join(',')).join('\n');
+  const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`invest35_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  showToast('✅ CSV téléchargé !');
+  document.getElementById('export-menu').style.display='none';
+}
+
+function exportPDF(){
+  document.getElementById('export-menu').style.display='none';
+  const w=window.open('','_blank');
+  const rows=filtered.map(p=>`
+    <tr>
+      <td>${p.commune}</td>
+      <td>${p.type}${p.rooms>0?' T'+p.rooms:''}</td>
+      <td>${p.surface}m²</td>
+      <td>${fmt(p.price)} €</td>
+      <td>${fmt(p.priceM2)} €/m²</td>
+      <td style="color:${p.yield>=7?'#2A6048':p.yield>=5?'#C4873A':'#B5311F'}">${p.yield}%</td>
+      <td>${fmt(p.rentEstimate)} €/mois</td>
+      <td><span style="background:${p.score>=85?'#fde8e8':p.score>=72?'#fef3e2':'#e8f5ee'};color:${p.score>=85?'#B5311F':p.score>=72?'#C4873A':'#2A6048'};padding:2px 6px;border-radius:4px;font-weight:600">${p.score}/100</span></td>
+    </tr>`).join('');
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Invest35 — Export</title>
+  <style>body{font-family:Georgia,serif;padding:2rem;color:#1a1a1a;}h1{color:#1B2B4B;font-size:1.6rem;margin-bottom:0.25rem;}p{color:#8a8780;font-size:0.8rem;margin-bottom:1.5rem;}table{width:100%;border-collapse:collapse;font-size:0.78rem;}th{background:#1B2B4B;color:#fff;padding:0.5rem 0.7rem;text-align:left;font-size:0.65rem;text-transform:uppercase;letter-spacing:0.05em;}td{padding:0.45rem 0.7rem;border-bottom:1px solid #E8E4DC;}tr:hover td{background:#F7F5F0;}@media print{button{display:none}}</style>
+  </head><body>
+  <h1>Invest<span style="color:#C4873A">35</span> — Résultats de recherche</h1>
+  <p>Exporté le ${new Date().toLocaleDateString('fr-FR')} · ${filtered.length} biens · Ille-et-Vilaine</p>
+  <button onclick="window.print()" style="margin-bottom:1rem;padding:0.5rem 1rem;background:#1B2B4B;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:0.8rem">🖨 Imprimer / Sauvegarder PDF</button>
+  <table><thead><tr><th>Commune</th><th>Type</th><th>Surface</th><th>Prix</th><th>Prix/m²</th><th>Rendement</th><th>Loyer</th><th>Score</th></tr></thead><tbody>${rows}</tbody></table>
+  </body></html>`);
+  w.document.close();
+  showToast('✅ PDF prêt à imprimer !');
 }
 
 document.addEventListener('DOMContentLoaded',()=>{
